@@ -10,6 +10,7 @@ namespace rabbit\snowflake;
 
 use rabbit\App;
 use rabbit\server\BootInterface;
+use Swoole\Atomic;
 
 /**
  * Class BootSnowflake
@@ -19,12 +20,12 @@ class BootSnowflake implements BootInterface
 {
     public function handle(): void
     {
-        $swooleServer = App::getServer();
+        $app = App::getApp();
         //创建自旋锁
-        $swooleServer->snowLock = new \Swoole\Lock(SWOOLE_SPINLOCK);
-        $swooleServer->lastTimestamp = 0;
+        $app->snowLock = new \Swoole\Lock(SWOOLE_SPINLOCK);
+        $app->lastTimestamp = 0;
 
         //设置原子计数
-        $swooleServer->snowAtomic = new Atomic(0);
+        $app->snowAtomic = new Atomic(0);
     }
 }

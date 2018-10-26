@@ -9,12 +9,14 @@
 namespace rabbit\snowflake;
 
 use rabbit\App;
+use rabbit\contract\IdGennerator;
+use rabbit\core\BaseObject;
 
 /**
  * Class SnowFlake
  * @package rabbit\snowflake
  */
-class SnowFlake
+class SnowFlake implements IdGennerator
 {
     //开始时间截 (2018-01-01)
     const twepoch = 1514736000000;
@@ -38,12 +40,10 @@ class SnowFlake
     const sequenceMask = (-1 ^ (-1 << self::sequenceBits));
 
     //工作ID(0~1020)：默认0，预留2位给ID类型
-    public $workerId = 0;
+    private $workerId = 0;
 
-    //数据库ID
-    const TYPE_DB = 0;
-    //请求ID
-    const TYPE_TRACE = 1;
+    /** @var BaseObject */
+    private $app;
 
     /**
      * SnowFlake constructor.
@@ -55,21 +55,21 @@ class SnowFlake
         if ($this->workerId > self::maxWorkerId || $this->workerId < 0) {
             $this->workerId = rand(0, self::maxWorkerId);
         }
+        $this->app = App::getApp();
     }
 
     /**
      * @param int $mId
      * @return int
      */
-    public function nextId(int $mId = self::TYPE_DB): int
+    private function nextId(): int
     {
         //申请自旋锁
-        $swooleServer = App::getServer();
-        $swooleServer->snowLock->lock();
+//        $this->app->snowLock->lock();
         //工作ID+类型ID
-        $mId += $this->workerId;
+        $mId = $this->workerId;
         //获取上一次生成id时的毫秒时间戳，需要跨进程共享属性
-        $lastTimestamp = $swooleServer->lastTimestamp;
+        $lastTimestamp = $this->app->lastTimestamp;
         //获取当前毫秒时间戳
         $time = floor(microtime(true) * 1000);
         /**
@@ -83,24 +83,24 @@ class SnowFlake
         //如果是同一毫秒内生成的，则进行毫秒序列化
         if ($lastTimestamp === $time) {
             //获取当前序列号值，原子计数器自增
-            $sequence = $swooleServer->snowAtomic->add() & self::sequenceMask;
+            $sequence = $this->app->snowAtomic->add() & self::sequenceMask;
             //毫秒序列化值溢出（就是超过了4095）
             if ($sequence === 0) {
-                $swooleServer->snowAtomic->set(0);
+                $this->app->snowAtomic->set(0);
                 //获得新的时间戳
                 $time = $this->tilNextMillis($lastTimestamp);
             }
         } else {
             //如果不是同一毫秒，那么重置毫秒序列化值
-            $swooleServer->atomic->set(0);
+            $this->app->atomic->set(0);
             $sequence = 0;
         }
 
         //重置最后一次生成的时间戳
-        $swooleServer->lastTimestamp = $time;
+        $this->app->lastTimestamp = $time;
 
         //释放锁
-        $swooleServer->snowLock->unlock();
+//        $this->app->snowLock->unlock();
 
         return
             //时间戳左移 22 位
@@ -120,9 +120,15 @@ class SnowFlake
         $time = floor(microtime(true) * 1000);
         while ($time <= $lastTimestamp) {
             $time = floor(microtime(true) * 1000);
-            //协程让出1毫秒
-            \Co::sleep(0.001);
         }
         return $time;
+    }
+
+    /**
+     * @return int|mixed
+     */
+    public function create()
+    {
+        return $this->nextId();
     }
 }
