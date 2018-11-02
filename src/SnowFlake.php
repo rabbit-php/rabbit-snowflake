@@ -92,7 +92,7 @@ class SnowFlake implements IdGennerator
             }
         } else {
             //如果不是同一毫秒，那么重置毫秒序列化值
-            $this->app->atomic->set(0);
+            $this->app->snowAtomic->set(0);
             $sequence = 0;
         }
 
