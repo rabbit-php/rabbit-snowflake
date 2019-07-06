@@ -1,20 +1,21 @@
 {
-    "name": "rabbit/snowflake",
-    "description": "rabbit snowflake",
-    "type": "library",
-    "require": {
-        "rabbit/framework": "dev-master"
-    },
-    "license": "MIT",
-    "authors": [
-        {
-            "name": "albert",
-            "email": "63851587@qq.com"
-        }
-    ],
-    "autoload": {
-        "psr-4": {
-            "rabbit\\snowflake\\": "src/"
-        }
+  "name": "rabbit/snowflake",
+  "description": "rabbit snowflake",
+  "type": "library",
+  "require": {
+    "rabbit/framework": "dev-master",
+    "rabbit/memory": "dev-master"
+  },
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "albert",
+      "email": "63851587@qq.com"
     }
+  ],
+  "autoload": {
+    "psr-4": {
+      "rabbit\\snowflake\\": "src/"
+    }
+  }
 }

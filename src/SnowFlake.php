@@ -8,9 +8,9 @@
 
 namespace rabbit\snowflake;
 
-use rabbit\App;
 use rabbit\contract\IdGennerator;
-use rabbit\core\BaseObject;
+use rabbit\memory\atomic\AtomicInterface;
+use rabbit\memory\atomic\LockInterface;
 
 /**
  * Class SnowFlake
@@ -42,20 +42,25 @@ class SnowFlake implements IdGennerator
     //工作ID(0~1020)：默认0，预留2位给ID类型
     private $workerId = 0;
 
-    /** @var BaseObject */
-    private $app;
+    /** @var AtomicInterface */
+    private $atomic;
+    /** @var float */
+    private $lastTimestamp = 0;
+    /** @var LockInterface */
+    private $lock;
 
     /**
      * SnowFlake constructor.
      * @param int $workerId
      */
-    public function __construct(int $workerId)
+    public function __construct(int $workerId, LockInterface $lock, AtomicInterface $atomic)
     {
         $this->workerId = $workerId;
         if ($this->workerId > self::maxWorkerId || $this->workerId < 0) {
             $this->workerId = rand(0, self::maxWorkerId);
         }
-        $this->app = App::getApp();
+        $this->atomic = $atomic;
+        $this->lock = $lock;
     }
 
     /**
@@ -64,51 +69,45 @@ class SnowFlake implements IdGennerator
      */
     private function nextId(): int
     {
-        //申请自旋锁
-//        $this->app->snowLock->lock();
         //工作ID+类型ID
         $mId = $this->workerId;
-        //获取上一次生成id时的毫秒时间戳，需要跨进程共享属性
-        $lastTimestamp = $this->app->lastTimestamp;
-        //获取当前毫秒时间戳
-        $time = floor(microtime(true) * 1000);
-        /**
-         * 高并发下，多进程模式会出现当前时间小于上一次ID生成的时间戳，不一定是时钟回退。工作ID加入进程ID即可解决，但是进程ID不好预留
-         * 暂时先立即更新最后一次生成的时间戳
-         */
-        if ($time < $lastTimestamp) {
-            throw new \RuntimeException("Clock moved backwards. Refusing to generate id for lastTimestamp {$lastTimestamp} milliseconds");
-        }
-
-        //如果是同一毫秒内生成的，则进行毫秒序列化
-        if ($lastTimestamp === $time) {
-            //获取当前序列号值，原子计数器自增
-            $sequence = $this->app->snowAtomic->add() & self::sequenceMask;
-            //毫秒序列化值溢出（就是超过了4095）
-            if ($sequence === 0) {
-                $this->app->snowAtomic->set(0);
-                //获得新的时间戳
-                $time = $this->tilNextMillis($lastTimestamp);
+        return $this->lock->lock(function () {
+            //获取上一次生成id时的毫秒时间戳，需要跨进程共享属性
+            $lastTimestamp = $this->lastTimestamp;
+            //获取当前毫秒时间戳
+            $time = floor(microtime(true) * 1000);
+            /**
+             * 高并发下，多进程模式会出现当前时间小于上一次ID生成的时间戳，不一定是时钟回退。工作ID加入进程ID即可解决，但是进程ID不好预留
+             * 暂时先立即更新最后一次生成的时间戳
+             */
+            if ($time < $lastTimestamp) {
+                throw new \RuntimeException("Clock moved backwards. Refusing to generate id for lastTimestamp {$lastTimestamp} milliseconds");
             }
-        } else {
-            //如果不是同一毫秒，那么重置毫秒序列化值
-            $this->app->snowAtomic->set(0);
-            $sequence = 0;
-        }
 
-        //重置最后一次生成的时间戳
-        $this->app->lastTimestamp = $time;
+            //如果是同一毫秒内生成的，则进行毫秒序列化
+            if ($lastTimestamp === $time) {
+                //获取当前序列号值，原子计数器自增 毫秒序列化值溢出（就是超过了4095）
+                if ($this->atomic->add() & self::sequenceMask === 0) {
+                    $this->atomic->set(0);
+                    //获得新的时间戳
+                    $time = $this->tilNextMillis($lastTimestamp);
+                }
+            } else {
+                //如果不是同一毫秒，那么重置毫秒序列化值
+                $this->atomic->set(0);
+            }
 
-        //释放锁
-//        $this->app->snowLock->unlock();
+            //重置最后一次生成的时间戳
+            $this->lastTimestamp = $time;
 
-        return
-            //时间戳左移 22 位
-            (($time - self::twepoch) << self::timestampLeftShift) |
-            //机器id左移 12 位
-            ($this->workerId << self::workerIdShift) |
-            //或运算序列号值
-            $sequence;
+            return
+                //时间戳左移 22 位
+                (($time - self::twepoch) << self::timestampLeftShift) |
+                //机器id左移 12 位
+                ($this->workerId << self::workerIdShift) |
+                //或运算序列号值
+                $this->atomic->get();
+        });
     }
 
     /**
