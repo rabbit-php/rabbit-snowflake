@@ -67,7 +67,7 @@ class SnowFlake implements IdGennerator
      * @param int $mId
      * @return int
      */
-    private function nextId(): int
+    private function nextId(): float
     {
         //工作ID+类型ID
         $mId = $this->workerId;
