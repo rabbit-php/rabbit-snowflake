@@ -56,7 +56,7 @@ class SnowFlake implements IdGennerator
     public function __construct(int $workerId, LockInterface $lock, AtomicInterface $atomic)
     {
         $this->workerId = $workerId;
-        if ($this->workerId > self::maxWorkerId || $this->workerId < 0) {
+        if ($this->workerId > self::maxWorkerId) {
             $this->workerId = rand(0, self::maxWorkerId);
         }
         $this->atomic = $atomic;
@@ -64,13 +64,10 @@ class SnowFlake implements IdGennerator
     }
 
     /**
-     * @param int $mId
-     * @return int
+     * @return float
      */
     private function nextId(): float
     {
-        //工作ID+类型ID
-        $mId = $this->workerId;
         return $this->lock->lock(function () {
             //获取上一次生成id时的毫秒时间戳，需要跨进程共享属性
             $lastTimestamp = $this->lastTimestamp;
@@ -100,13 +97,21 @@ class SnowFlake implements IdGennerator
             //重置最后一次生成的时间戳
             $this->lastTimestamp = $time;
 
-            return
-                //时间戳左移 22 位
-                (($time - self::twepoch) << self::timestampLeftShift) |
-                //机器id左移 12 位
-                ($this->workerId << self::workerIdShift) |
-                //或运算序列号值
-                $this->atomic->get();
+            if ($this->workerId > -1) {
+                return
+                    //时间戳左移 22 位
+                    (($time - self::twepoch) << self::timestampLeftShift) |
+                    //机器id左移 12 位
+                    ($this->workerId << self::workerIdShift) |
+                    //或运算序列号值
+                    $this->atomic->get();
+            } else {
+                return
+                    //时间戳左移 10 位
+                    (($time - self::twepoch) << 10) |
+                    //或运算序列号值
+                    $this->atomic->get();
+            }
         });
     }
 
