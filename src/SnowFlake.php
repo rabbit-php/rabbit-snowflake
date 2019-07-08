@@ -10,7 +10,9 @@ namespace rabbit\snowflake;
 
 use rabbit\contract\IdGennerator;
 use rabbit\memory\atomic\AtomicInterface;
+use rabbit\memory\atomic\AtomicLock;
 use rabbit\memory\atomic\LockInterface;
+use Swoole\Atomic;
 
 /**
  * Class SnowFlake
@@ -45,7 +47,7 @@ class SnowFlake implements IdGennerator
     /** @var AtomicInterface */
     private $atomic;
     /** @var float */
-    private $lastTimestamp = 0;
+    private $lastTimestamp = self::twepoch;
     /** @var LockInterface */
     private $lock;
 
@@ -53,14 +55,14 @@ class SnowFlake implements IdGennerator
      * SnowFlake constructor.
      * @param int $workerId
      */
-    public function __construct(int $workerId, LockInterface $lock, AtomicInterface $atomic)
+    public function __construct(int $workerId)
     {
         $this->workerId = $workerId;
         if ($this->workerId > self::maxWorkerId) {
             $this->workerId = rand(0, self::maxWorkerId);
         }
-        $this->atomic = $atomic;
-        $this->lock = $lock;
+        $this->atomic = new Atomic();
+        $this->lock = new AtomicLock();
     }
 
     /**
