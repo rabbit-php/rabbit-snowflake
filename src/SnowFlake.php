@@ -68,13 +68,13 @@ class SnowFlake implements IdGennerator
     /**
      * @return float
      */
-    private function nextId(): float
+    private function nextId(): int
     {
-        return $this->lock->lock(function () {
+        return (int)$this->lock->lock(function () {
             //获取上一次生成id时的毫秒时间戳，需要跨进程共享属性
             $lastTimestamp = $this->lastTimestamp;
             //获取当前毫秒时间戳
-            $time = floor(microtime(true) * 1000);
+            $time = microtime(true) * 1000;
             /**
              * 高并发下，多进程模式会出现当前时间小于上一次ID生成的时间戳，不一定是时钟回退。工作ID加入进程ID即可解决，但是进程ID不好预留
              * 暂时先立即更新最后一次生成的时间戳
@@ -121,11 +121,11 @@ class SnowFlake implements IdGennerator
      * @param float $lastTimestamp
      * @return float
      */
-    private function tilNextMillis(float $lastTimestamp): float
+    private function tilNextMillis(float $lastTimestamp): int
     {
-        $time = floor(microtime(true) * 1000);
+        $time = microtime(true) * 1000;
         while ($time <= $lastTimestamp) {
-            $time = floor(microtime(true) * 1000);
+            $time = microtime(true) * 1000;
         }
         return $time;
     }

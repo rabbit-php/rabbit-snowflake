@@ -3,6 +3,7 @@
   "description": "rabbit snowflake",
   "type": "library",
   "require": {
+    "ext-gmp": "*",
     "rabbit/framework": "dev-master",
     "rabbit/memory": "dev-master"
   },
