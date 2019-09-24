@@ -46,7 +46,7 @@ class SnowFlake implements IdGennerator
 
     /** @var AtomicInterface */
     private $atomic;
-    /** @var float */
+    /** @var int */
     private $lastTimestamp = self::twepoch;
     /** @var LockInterface */
     private $lock;
@@ -73,7 +73,7 @@ class SnowFlake implements IdGennerator
     }
 
     /**
-     * @return float
+     * @return int
      */
     private function nextId(): int
     {
@@ -143,8 +143,8 @@ class SnowFlake implements IdGennerator
     public function create()
     {
         if ($this->useExt) {
-            return (int)dk_get_ts_id();
+            return (int)dk_get_next_id();
         }
-        return $this->nextId();
+        return (int)$this->nextId();
     }
 }
