@@ -50,6 +50,8 @@ class SnowFlake implements IdGennerator
     private $lastTimestamp = self::twepoch;
     /** @var LockInterface */
     private $lock;
+    /** @var bool */
+    private $useExt = false;
 
     /**
      * SnowFlake constructor.
@@ -60,6 +62,11 @@ class SnowFlake implements IdGennerator
         $this->workerId = $workerId;
         if ($this->workerId > self::maxWorkerId) {
             $this->workerId = rand(0, self::maxWorkerId);
+        }
+        if (extension_loaded('donkeyid')) {
+            $this->useExt = true;
+            ini_set('node_id', $this->workerId);
+            ini_set('epoch', self::twepoch);
         }
         $this->atomic = new Atomic();
         $this->lock = new AtomicLock();
@@ -135,6 +142,9 @@ class SnowFlake implements IdGennerator
      */
     public function create()
     {
+        if ($this->useExt) {
+            return (int)dk_get_ts_id();
+        }
         return $this->nextId();
     }
 }
