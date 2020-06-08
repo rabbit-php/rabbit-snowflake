@@ -77,7 +77,8 @@ class SnowFlake implements IdGennerator
      */
     private function nextId(): int
     {
-        return (int)$this->lock->lock(function () {
+        $lock = $this->lock;
+        return (int)$lock(function () {
             //获取上一次生成id时的毫秒时间戳，需要跨进程共享属性
             $lastTimestamp = $this->lastTimestamp;
             //获取当前毫秒时间戳
