@@ -4,8 +4,8 @@
   "type": "library",
   "require": {
     "ext-gmp": "*",
-    "rabbit/framework": "dev-master",
-    "rabbit/memory": "dev-master"
+    "rabbit/framework": "^1.0",
+    "rabbit/memory": "^1.0"
   },
   "license": "MIT",
   "authors": [
