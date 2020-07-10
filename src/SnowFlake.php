@@ -1,24 +1,19 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: Administrator
- * Date: 2018/10/23
- * Time: 11:03
- */
+declare(strict_types=1);
 
-namespace rabbit\snowflake;
+namespace Rabbit\SnowFlake;
 
-use rabbit\contract\IdGennerator;
-use rabbit\memory\atomic\AtomicInterface;
-use rabbit\memory\atomic\AtomicLock;
-use rabbit\memory\atomic\LockInterface;
+use Rabbit\Base\atomic\AtomicLock;
+use Rabbit\Base\Contract\IdInterface;
+use Rabbit\Base\Contract\LockInterface;
 use Swoole\Atomic;
+use Throwable;
 
 /**
  * Class SnowFlake
- * @package rabbit\snowflake
+ * @package Rabbit\SnowFlake
  */
-class SnowFlake implements IdGennerator
+class SnowFlake implements IdInterface
 {
     //开始时间截 (2018-01-01)
     const twepoch = 1514736000000;
@@ -42,22 +37,20 @@ class SnowFlake implements IdGennerator
     const sequenceMask = (-1 ^ (-1 << self::sequenceBits));
 
     //工作ID(0~1020)：默认0，预留2位给ID类型
-    private $workerId = 0;
+    private int $workerId;
 
-    /** @var AtomicInterface */
-    private $atomic;
+    private ?Atomic $atomic = null;
     /** @var int */
-    private $lastTimestamp = self::twepoch;
-    /** @var LockInterface */
-    private $lock;
+    private int $lastTimestamp = self::twepoch;
+    private ?LockInterface $lock = null;
     /** @var bool */
-    private $useExt = false;
+    private bool $useExt = false;
 
     /**
      * SnowFlake constructor.
      * @param int $workerId
      */
-    public function __construct(int $workerId)
+    public function __construct(int $workerId = 0)
     {
         $this->workerId = $workerId;
         if ($this->workerId > self::maxWorkerId) {
@@ -67,13 +60,15 @@ class SnowFlake implements IdGennerator
             $this->useExt = true;
             ini_set('node_id', $this->workerId);
             ini_set('epoch', self::twepoch);
+        } else {
+            $this->atomic = new Atomic();
+            $this->lock = new AtomicLock();
         }
-        $this->atomic = new Atomic();
-        $this->lock = new AtomicLock();
     }
 
     /**
      * @return int
+     * @throws Throwable
      */
     private function nextId(): int
     {
@@ -127,7 +122,7 @@ class SnowFlake implements IdGennerator
 
     /**
      * @param float $lastTimestamp
-     * @return float
+     * @return int
      */
     private function tilNextMillis(float $lastTimestamp): int
     {
@@ -140,6 +135,7 @@ class SnowFlake implements IdGennerator
 
     /**
      * @return int|mixed
+     * @throws Throwable
      */
     public function create()
     {
