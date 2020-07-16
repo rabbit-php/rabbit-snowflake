@@ -58,8 +58,8 @@ class SnowFlake implements IdInterface
         }
         if (extension_loaded('donkeyid')) {
             $this->useExt = true;
-            ini_set('node_id', $this->workerId);
-            ini_set('epoch', self::twepoch);
+            ini_set('node_id', (string)$this->workerId);
+            ini_set('epoch', (string)self::twepoch);
         } else {
             $this->atomic = new Atomic();
             $this->lock = new AtomicLock();
