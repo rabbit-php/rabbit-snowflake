@@ -44,7 +44,7 @@ class SnowFlake implements IdInterface
     private ?Atomic $atomic = null;
     private int $lastTimestamp = self::twepoch;
     private ?LockInterface $lock = null;
-    private int $useExt = self::EXT_NO;
+    private int $useExt = self::EXT_SNOWFLAKE;
 
     /**
      * SnowFlake constructor.
@@ -156,7 +156,7 @@ class SnowFlake implements IdInterface
         if ($this->useExt === self::EXT_SNOWFLAKE) {
             return (int)\SnowFlake::getId();
         }
-        if ($this->useExt === self::EXT_DONKEYID) {
+        elseif ($this->useExt === self::EXT_DONKEYID) {
             return (int)dk_get_next_id();
         }
         return (int)$this->nextId();
