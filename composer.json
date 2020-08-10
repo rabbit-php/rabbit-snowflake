@@ -13,7 +13,8 @@
     "phpunit/phpunit": "*"
   },
   "suggest": {
-    "ext-donkeyid": "Use DonkeyId"
+    "ext-donkeyid": "Use DonkeyId with https://github.com/osgochina/donkeyid",
+    "ext-snowflake": "Use Snowflake with https://github.com/amuluowin/php-ext-snowflake"
   },
   "license": "MIT",
   "authors": [

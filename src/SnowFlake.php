@@ -36,15 +36,15 @@ class SnowFlake implements IdInterface
     //序列号值的最大值，这里为4095 (0b111111111111=0xfff=4095)
     const sequenceMask = (-1 ^ (-1 << self::sequenceBits));
 
+    const EXT_NO = 0;
+    const EXT_DONKEYID = 1;
+    const EXT_SNOWFLAKE = 2;
     //工作ID(0~1020)：默认0，预留2位给ID类型
     private int $workerId;
-
     private ?Atomic $atomic = null;
-    /** @var int */
     private int $lastTimestamp = self::twepoch;
     private ?LockInterface $lock = null;
-    /** @var bool */
-    private bool $useExt = false;
+    private int $useExt = self::EXT_NO;
 
     /**
      * SnowFlake constructor.
@@ -56,10 +56,24 @@ class SnowFlake implements IdInterface
         if ($this->workerId > self::maxWorkerId) {
             $this->workerId = rand(0, self::maxWorkerId);
         }
-        if (extension_loaded('donkeyid')) {
-            $this->useExt = true;
-            ini_set('node_id', (string)$this->workerId);
-            ini_set('epoch', (string)self::twepoch);
+        if (extension_loaded('snowflake')) {
+            $this->useExt = self::EXT_SNOWFLAKE;
+            $workerBits = (int)ini_get('snowflake.worker_bits');
+            $regionBits = (int)ini_get('snowflake.region_bits');
+            $workerId = 1;
+            $regionId = 0;
+            for ($i = 1; $i < $workerBits; $i++) {
+                $regionId = $workerId = $workerId << 1 ^ 1;
+            }
+            for ($i = 0; $i < $regionBits; $i++) {
+                $regionId = $regionId << 1;
+            }
+            ini_set('snowflake.worker_id', (string)($this->workerId & $workerId));
+            ini_set('snowflake.region_id', (string)($this->workerId & $regionId));
+        } elseif (extension_loaded('donkeyid')) {
+            $this->useExt = self::EXT_DONKEYID;
+            ini_set('donkeyid.node_id', (string)$this->workerId);
+            ini_set('donkeyid.epoch', (string)self::twepoch);
         } else {
             $this->atomic = new Atomic();
             $this->lock = new AtomicLock();
@@ -139,7 +153,10 @@ class SnowFlake implements IdInterface
      */
     public function create()
     {
-        if ($this->useExt) {
+        if ($this->useExt === self::EXT_SNOWFLAKE) {
+            return (int)\SnowFlake::getId();
+        }
+        if ($this->useExt === self::EXT_DONKEYID) {
             return (int)dk_get_next_id();
         }
         return (int)$this->nextId();
