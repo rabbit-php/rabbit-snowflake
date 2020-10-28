@@ -4,7 +4,6 @@
   "type": "library",
   "require": {
     "php": ">=7.4.0",
-    "ext-swoole": ">=4.5.0",
     "ext-gmp": "*",
     "rabbit/base": "dev-master"
   },
