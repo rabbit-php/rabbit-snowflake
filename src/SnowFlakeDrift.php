@@ -68,7 +68,7 @@ class SnowFlakeDrift implements IdInterface
         $this->currentSeqNumber = $options->minSeqNumber;
     }
 
-    private function BeginOverCostAction($useTimeTick): void
+    private function beginOverCostAction($useTimeTick): void
     {
     }
 
@@ -143,7 +143,7 @@ class SnowFlakeDrift implements IdInterface
                 if ($this->turnBackIndex > 4) {
                     $this->turnBackIndex = 1;
                 }
-                $this->beginTurnBackAction($this->turnBackTimeTick);
+                // $this->beginTurnBackAction($this->turnBackTimeTick);
             }
 
             usleep(10 * 1000);
@@ -152,7 +152,7 @@ class SnowFlakeDrift implements IdInterface
 
         // 时间追平时，_TurnBackTimeTick清零
         if ($this->turnBackTimeTick > 0) {
-            $this->endTurnBackAction($this->turnBackTimeTick);
+            // $this->endTurnBackAction($this->turnBackTimeTick);
             $this->turnBackTimeTick = 0;
         }
 
@@ -164,7 +164,7 @@ class SnowFlakeDrift implements IdInterface
         }
 
         if ($this->currentSeqNumber > $this->maxSeqNumber) {
-            $this->beginOverCostAction($currentTimeTick);
+            // $this->beginOverCostAction($currentTimeTick);
 
             $this->termIndex++;
             $this->lastTimeTick++;
