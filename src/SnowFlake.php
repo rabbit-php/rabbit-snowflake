@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Rabbit\SnowFlake;
@@ -70,10 +71,6 @@ class SnowFlake implements IdInterface
             }
             ini_set('snowflake.worker_id', (string)($this->workerId & $workerId));
             ini_set('snowflake.region_id', (string)($this->workerId & $regionId));
-        } elseif (extension_loaded('donkeyid')) {
-            $this->useExt = self::EXT_DONKEYID;
-            ini_set('donkeyid.node_id', (string)$this->workerId);
-            ini_set('donkeyid.epoch', (string)self::twepoch);
         } else {
             $this->atomic = new Atomic();
             $this->lock = new AtomicLock();
@@ -84,7 +81,7 @@ class SnowFlake implements IdInterface
      * @return int
      * @throws Throwable
      */
-    private function nextId(): int
+    private function getId(): int
     {
         $lock = $this->lock;
         return (int)$lock(function () {
@@ -144,21 +141,18 @@ class SnowFlake implements IdInterface
         while ($time <= $lastTimestamp) {
             $time = microtime(true) * 1000;
         }
-        return $time;
+        return (int)$time;
     }
 
     /**
      * @return int|mixed
      * @throws Throwable
      */
-    public function create()
+    public function nextId()
     {
         if ($this->useExt === self::EXT_SNOWFLAKE) {
             return (int)\SnowFlake::getId();
         }
-        elseif ($this->useExt === self::EXT_DONKEYID) {
-            return (int)dk_get_next_id();
-        }
-        return (int)$this->nextId();
+        return (int)$this->getId();
     }
 }
