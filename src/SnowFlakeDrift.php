@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Rabbit\SnowFlake;
 
 use Rabbit\Base\Contract\IdInterface;
+use Rabbit\Base\Exception\InvalidConfigException;
 
 class SnowFlakeDrift implements IdInterface
 {
@@ -57,6 +58,32 @@ class SnowFlakeDrift implements IdInterface
 
     public function __construct(Options $options)
     {
+
+        if ($options->baseTime < strtotime("-50 year") || $options->baseTime > microtime(true) * 1000) {
+            throw new InvalidConfigException("BaseTime error.");
+        }
+
+        if ($options->seqBitLength + $options->workerIdBitLength > 22) {
+            throw new InvalidConfigException("error：WorkerIdBitLength + SeqBitLength <= 22");
+        }
+
+        $maxWorkerIdNumber = (int)pow(2, $options->workerIdBitLength) - 1;
+        if ($options->workerId < 0 || $options->workerId > $maxWorkerIdNumber) {
+            throw new InvalidConfigException("WorkerId error. (range:[1, $maxWorkerIdNumber]");
+        }
+
+        if ($options->seqBitLength < 2 || $options->seqBitLength > 21) {
+            throw new InvalidConfigException("SeqBitLength error. (range:[2, 21])");
+        }
+
+        $maxSeqNumber = (int)pow(2, $options->seqBitLength) - 1;
+        if ($options->maxSeqNumber < 0 || $options->maxSeqNumber > $maxSeqNumber) {
+            throw new InvalidConfigException("MaxSeqNumber error. (range:[1, $maxSeqNumber]");
+        }
+        if ($options->minSeqNumber < 1 || $options->minSeqNumber > $maxSeqNumber) {
+            throw new InvalidConfigException("MinSeqNumber error. (range:[1, $maxSeqNumber]");
+        }
+
         $this->workerId = $options->workerId;
         $this->workerIdBitLength = $options->workerIdBitLength === 0 ? 6 : $options->workerIdBitLength;
         $this->seqBitLength = $options->seqBitLength === 0 ? 6 : $options->seqBitLength;
