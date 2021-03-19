@@ -173,8 +173,6 @@ class SnowDrift implements IdInterface
                 }
                 // $this->beginTurnBackAction($this->turnBackTimeTick);
             }
-
-            usleep(10 * 1000);
             return $this->calcTurnBackId($this->turnBackTimeTick);
         }
 
