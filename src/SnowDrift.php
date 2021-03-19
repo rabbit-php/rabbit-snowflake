@@ -7,7 +7,7 @@ namespace Rabbit\SnowFlake;
 use Rabbit\Base\Contract\IdInterface;
 use Rabbit\Base\Exception\InvalidConfigException;
 
-class SnowFlakeDrift implements IdInterface
+class SnowDrift implements IdInterface
 {
     /**
      * 基础时间

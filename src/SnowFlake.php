@@ -13,7 +13,7 @@ use Throwable;
  * Class SnowFlake
  * @package Rabbit\SnowFlake
  */
-class SnowFlake extends SnowFlakeDrift
+class SnowFlake extends SnowDrift
 {
     const EXT_NO = 0;
     const EXT_DONKEYID = 1;
