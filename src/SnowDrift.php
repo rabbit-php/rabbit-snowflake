@@ -55,6 +55,7 @@ class SnowDrift implements IdInterface
     protected int $overCostCountInOneTerm = 0;
     protected int $genCountInOneTerm = 0;
     protected int $termIndex = 0;
+    protected int $lock = 0;
 
     public function __construct(Options $options)
     {

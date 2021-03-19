@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Rabbit\SnowFlake;
 
-use Rabbit\Base\atomic\AtomicLock;
 use RuntimeException;
 use Swoole\Atomic;
 use Throwable;
@@ -16,10 +15,10 @@ use Throwable;
 class SnowFlake extends SnowDrift
 {
     const EXT_NO = 0;
-    const EXT_DONKEYID = 1;
+    const EXT_SNOWDRIFT = 1;
     const EXT_SNOWFLAKE = 2;
     private ?Atomic $atomic = null;
-    private int $useExt = self::EXT_SNOWFLAKE;
+    private int $useExt = 0;
 
     /**
      * SnowFlake constructor.
@@ -28,8 +27,7 @@ class SnowFlake extends SnowDrift
     public function __construct(Options $options)
     {
         parent::__construct($options);
-        if (extension_loaded('snowflake')) {
-            $this->useExt = self::EXT_SNOWFLAKE;
+        if ($this->useExt === self::EXT_SNOWFLAKE && extension_loaded('snowflake')) {
             $workerBits = (int)ini_get('snowflake.worker_bits');
             $regionBits = (int)ini_get('snowflake.region_bits');
             $workerId = 1;
@@ -42,8 +40,16 @@ class SnowFlake extends SnowDrift
             }
             ini_set('snowflake.worker_id', (string)($this->workerId & $workerId));
             ini_set('snowflake.region_id', (string)($this->workerId & $regionId));
+        } elseif ($this->useExt === self::EXT_SNOWDRIFT && extension_loaded('snowdrift')) {
+            ini_set('snowflake.Method', '1');
+            ini_set('snowflake.BaseTime', (string)$this->baseTime);
+            ini_set('snowflake.WorkerId', (string)$this->workerId);
+            ini_set('snowflake.WorkerIdBitLength', (string)$this->workerIdBitLength);
+            ini_set('snowflake.SeqBitLength', (string)$this->seqBitLength);
+            ini_set('snowflake.TopOverCostCount', (string)$this->topOverCostCount);
+            ini_set('snowflake.Lock', (string)$this->lock);
         } else {
-            $this->lock = new AtomicLock();
+            $this->atomic = new Atomic(0);
         }
     }
 
@@ -79,6 +85,8 @@ class SnowFlake extends SnowDrift
     {
         if ($this->useExt === self::EXT_SNOWFLAKE) {
             return (int)\SnowFlake::getId();
+        } elseif ($this->useExt === self::EXT_SNOWDRIFT) {
+            return (int)\SnowDrift::getId();
         }
         return (int)$this->getId();
     }
