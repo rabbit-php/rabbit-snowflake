@@ -94,6 +94,7 @@ class SnowFlake implements IdInterface
             throw new InvalidConfigException("MinSeqNumber error. (range:[1, $maxSeqNumber]");
         }
 
+        $this->method = $options->method;
         $this->workerId = $options->workerId;
         $this->workerIdBitLength = $options->workerIdBitLength === 0 ? 6 : $options->workerIdBitLength;
         $this->seqBitLength = $options->seqBitLength === 0 ? 6 : $options->seqBitLength;
