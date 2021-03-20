@@ -8,6 +8,7 @@ use Rabbit\Base\Contract\IdInterface;
 use Rabbit\Base\Exception\InvalidConfigException;
 use RuntimeException;
 use Swoole\Atomic;
+use Swoole\Lock;
 
 class SnowFlake implements IdInterface
 {
@@ -60,11 +61,12 @@ class SnowFlake implements IdInterface
     protected int $overCostCountInOneTerm = 0;
     protected int $genCountInOneTerm = 0;
     protected int $termIndex = 0;
-    protected int $lock = 0;
+    protected bool $lock = false;
 
     private int $currentSeqNumber = 0;
     private int $method = self::PHP_DRIFT;
     private Atomic $atomic;
+    private Lock $swLock;
 
     public function __construct(Options $options)
     {
@@ -104,6 +106,10 @@ class SnowFlake implements IdInterface
         $this->baseTime = $options->baseTime !== 0 ? $options->baseTime : 1582136402000;
         $this->timestampShift = $this->workerIdBitLength + $this->seqBitLength;
         $this->currentSeqNumber = $options->minSeqNumber;
+        $this->lock = $options->lock;
+        if ($this->lock) {
+            $this->swLock = new Lock(SWOOLE_SPINLOCK);
+        }
         $this->atomic = new Atomic($options->minSeqNumber);
     }
 
@@ -281,11 +287,17 @@ class SnowFlake implements IdInterface
             case self::PHP_FLAKE:
                 return $this->getId();
             case self::EXT_DRIFT:
-                return (int)\SnowDrift::getId();
+                return (int)\SnowDrift::NextId();
             case self::EXT_FLAKE:
                 return (int)\SnowFlake::getId();
             case self::PHP_DRIFT:
             default:
+                if ($this->lock) {
+                    $this->swLock->lock();
+                    $id = $this->isOverCost ? $this->nextOverCostId() : $this->nextNormalId();
+                    $this->swLock->unlock();
+                    return $id;
+                }
                 return $this->isOverCost ? $this->nextOverCostId() : $this->nextNormalId();
         }
     }

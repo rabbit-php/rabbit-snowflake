@@ -51,6 +51,7 @@ class Options
      */
     public int $minSeqNumber = 5;
 
+    public bool $lock = false;
     /**
      * 最大漂移次数（含）
      * 默认2000，推荐范围500-10000（与计算能力有关）
