@@ -7,7 +7,6 @@ namespace Rabbit\SnowFlake;
 use Rabbit\Base\Contract\IdInterface;
 use Rabbit\Base\Exception\InvalidConfigException;
 use RuntimeException;
-use Swoole\Atomic;
 use Swoole\Lock;
 
 class SnowFlake implements IdInterface
@@ -65,7 +64,6 @@ class SnowFlake implements IdInterface
 
     private int $currentSeqNumber = 0;
     private int $method = self::PHP_DRIFT;
-    private Atomic $atomic;
     private Lock $swLock;
 
     public function __construct(Options $options)
@@ -110,7 +108,6 @@ class SnowFlake implements IdInterface
         if ($this->lock) {
             $this->swLock = new Lock(SWOOLE_SPINLOCK);
         }
-        $this->atomic = new Atomic($options->minSeqNumber);
     }
 
     private function beginOverCostAction($useTimeTick): void
@@ -265,12 +262,11 @@ class SnowFlake implements IdInterface
     {
         $currentTimeTick = $this->getCurrentTimeTick();
         if ($this->lastTimeTick === $currentTimeTick) {
-            if ($this->atomic->add() > $this->maxSeqNumber) {
-                $this->atomic->set($this->minSeqNumber);
+            if (0 === $this->currentSeqNumber = (++$this->currentSeqNumber) & $this->maxSeqNumber) {
                 $currentTimeTick = $this->getNextTimeTick();
             }
         } else {
-            $this->atomic->set($this->minSeqNumber);
+            $this->currentSeqNumber = $this->minSeqNumber;
         }
 
         if ($currentTimeTick < $this->lastTimeTick) {
@@ -278,13 +274,19 @@ class SnowFlake implements IdInterface
         }
 
         $this->lastTimeTick = $currentTimeTick;
-        return ($currentTimeTick << $this->timestampShift) + ($this->workerId << $this->seqBitLength) + $this->atomic->get();
+        return ($currentTimeTick << $this->timestampShift) + ($this->workerId << $this->seqBitLength) + $this->currentSeqNumber;
     }
 
     public function nextId(): int
     {
         switch ($this->method) {
             case self::PHP_FLAKE:
+                if ($this->lock) {
+                    $this->swLock->lock();
+                    $id = $this->getId();
+                    $this->swLock->unlock();
+                    return $id;
+                }
                 return $this->getId();
             case self::EXT_DRIFT:
                 return (int)\SnowDrift::NextId();
