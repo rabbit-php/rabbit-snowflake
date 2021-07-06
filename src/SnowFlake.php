@@ -7,6 +7,8 @@ namespace Rabbit\SnowFlake;
 use Rabbit\Base\Contract\IdInterface;
 use Rabbit\Base\Exception\InvalidConfigException;
 use RuntimeException;
+use Swoole\Atomic;
+use Swoole\Atomic\Long;
 use Swoole\Lock;
 
 class SnowFlake implements IdInterface
@@ -18,7 +20,7 @@ class SnowFlake implements IdInterface
     /**
      * 基础时间
      */
-    protected int $baseTime;
+    protected Long $baseTime;
 
     /**
      * 机器码
@@ -38,7 +40,7 @@ class SnowFlake implements IdInterface
     /**
      * 最大序列数（含）
      */
-    protected  int $maxSeqNumber;
+    protected int $maxSeqNumber;
 
     /**
      * 最小序列数（含）
@@ -48,21 +50,21 @@ class SnowFlake implements IdInterface
     /**
      * 最大漂移次数
      */
-    protected int $topOverCostCount;
+    protected Atomic $topOverCostCount;
 
     protected int $timestampShift;
 
-    protected int $lastTimeTick = -1;
-    protected int $turnBackTimeTick = -1;
-    protected int $turnBackIndex = 0;
+    protected Long $lastTimeTick;
+    protected Atomic $turnBackTimeTick;
+    protected Atomic $turnBackIndex;
 
-    protected bool $isOverCost = false;
-    protected int $overCostCountInOneTerm = 0;
-    protected int $genCountInOneTerm = 0;
-    protected int $termIndex = 0;
+    protected Atomic $isOverCost;
+    protected Atomic $overCostCountInOneTerm;
+    protected Atomic $genCountInOneTerm;
+    protected Atomic $termIndex;
     protected bool $lock = false;
 
-    private int $currentSeqNumber = 0;
+    private Atomic $currentSeqNumber;
     private int $method = self::PHP_DRIFT;
     private Lock $swLock;
 
@@ -100,10 +102,19 @@ class SnowFlake implements IdInterface
         $this->seqBitLength = $options->seqBitLength === 0 ? 6 : $options->seqBitLength;
         $this->maxSeqNumber = $options->maxSeqNumber > 0 ? $options->maxSeqNumber : (int)pow(2, $this->seqBitLength) - 1;
         $this->minSeqNumber = $options->minSeqNumber;
-        $this->topOverCostCount = $options->topOverCostCount;
-        $this->baseTime = $options->baseTime !== 0 ? $options->baseTime : 1582136402000;
+        $this->topOverCostCount = new Atomic($options->topOverCostCount);
+        $this->baseTime = new Long($options->baseTime !== 0 ? $options->baseTime : 1582136402000);
         $this->timestampShift = $this->workerIdBitLength + $this->seqBitLength;
-        $this->currentSeqNumber = $options->minSeqNumber;
+        $this->currentSeqNumber = new Atomic($options->minSeqNumber);
+        $this->lastTimeTick = new Long(0);
+        $this->turnBackTimeTick = new Atomic(0);
+        $this->turnBackIndex = new Atomic(0);
+        $this->isOverCost = new Atomic(0);
+        $this->overCostCountInOneTerm = new Atomic(0);
+        $this->genCountInOneTerm = new Atomic(0);
+        $this->termIndex = new Atomic(0);
+        $this->currentSeqNumber = new Atomic(0);
+
         $this->lock = $options->lock;
         if ($this->lock) {
             $this->swLock = new Lock(SWOOLE_SPINLOCK);
@@ -116,8 +127,8 @@ class SnowFlake implements IdInterface
 
     private function endOverCostAction(int $useTimeTick): void
     {
-        if ($this->termIndex > 10000) {
-            $this->termIndex = 0;
+        if ($this->termIndex->get() > 10000) {
+            $this->termIndex->set(0);
         }
     }
 
@@ -133,114 +144,114 @@ class SnowFlake implements IdInterface
     {
         $currentTimeTick = $this->getCurrentTimeTick();
 
-        if ($currentTimeTick > $this->lastTimeTick) {
+        if ($currentTimeTick > $this->lastTimeTick->get()) {
             $this->endOverCostAction($currentTimeTick);
 
-            $this->lastTimeTick = $currentTimeTick;
-            $this->currentSeqNumber = $this->minSeqNumber;
-            $this->isOverCost = false;
-            $this->overCostCountInOneTerm = 0;
-            $this->genCountInOneTerm = 0;
+            $this->lastTimeTick->set($currentTimeTick);
+            $this->currentSeqNumber->set($this->minSeqNumber);
+            $this->isOverCost->set(0);
+            $this->overCostCountInOneTerm->set(0);
+            $this->genCountInOneTerm->set(0);
 
-            return $this->calcId($this->lastTimeTick);
+            return $this->calcId();
         }
 
         if ($this->overCostCountInOneTerm >= $this->topOverCostCount) {
             $this->endOverCostAction($currentTimeTick);
 
-            $this->lastTimeTick = $this->getNextTimeTick();
-            $this->currentSeqNumber = $this->minSeqNumber;
-            $this->isOverCost = false;
-            $this->overCostCountInOneTerm = 0;
-            $this->genCountInOneTerm = 0;
+            $this->lastTimeTick->set($this->getNextTimeTick());
+            $this->currentSeqNumber->set($this->minSeqNumber);
+            $this->isOverCost->set(0);
+            $this->overCostCountInOneTerm->set(0);
+            $this->genCountInOneTerm->set(0);
 
-            return $this->calcId($this->lastTimeTick);
+            return $this->calcId();
         }
 
-        if ($this->currentSeqNumber > $this->maxSeqNumber) {
-            $this->lastTimeTick++;
-            $this->currentSeqNumber = $this->minSeqNumber;
-            $this->isOverCost = true;
-            $this->overCostCountInOneTerm++;
-            $this->genCountInOneTerm++;
+        if ($this->currentSeqNumber->get() > $this->maxSeqNumber) {
+            $this->lastTimeTick->add();
+            $this->currentSeqNumber->set($this->minSeqNumber);
+            $this->isOverCost->set(0);
+            $this->overCostCountInOneTerm->add();
+            $this->genCountInOneTerm->add();
 
-            return $this->calcId($this->lastTimeTick);
+            return $this->calcId();
         }
 
-        $this->genCountInOneTerm++;
-        return $this->calcId($this->lastTimeTick);
+        $this->genCountInOneTerm->add();
+        return $this->calcId();
     }
 
     private function nextNormalId(): int
     {
         $currentTimeTick = $this->getCurrentTimeTick();
 
-        if ($currentTimeTick < $this->lastTimeTick) {
-            if ($this->turnBackTimeTick < 1) {
-                $this->turnBackTimeTick = $this->lastTimeTick - 1;
-                $this->turnBackIndex++;
+        if ($currentTimeTick < $this->lastTimeTick->get()) {
+            if ($this->turnBackTimeTick->get() < 1) {
+                $this->turnBackTimeTick->set($this->lastTimeTick->get() - 1);
+                $this->turnBackIndex->add();
 
                 // 每毫秒序列数的前5位是预留位，0用于手工新值，1-4是时间回拨次序
                 // 最多4次回拨（防止回拨重叠）
-                if ($this->turnBackIndex > 4) {
-                    $this->turnBackIndex = 1;
+                if ($this->turnBackIndex->get() > 4) {
+                    $this->turnBackIndex->set(1);
                 }
                 // $this->beginTurnBackAction($this->turnBackTimeTick);
             }
-            return $this->calcTurnBackId($this->turnBackTimeTick);
+            return $this->calcTurnBackId();
         }
 
         // 时间追平时，_TurnBackTimeTick清零
-        if ($this->turnBackTimeTick > 0) {
+        if ($this->turnBackTimeTick->get() > 0) {
             // $this->endTurnBackAction($this->turnBackTimeTick);
-            $this->turnBackTimeTick = 0;
+            $this->turnBackTimeTick->set(0);
         }
 
-        if ($currentTimeTick > $this->lastTimeTick) {
-            $this->lastTimeTick = $currentTimeTick;
-            $this->currentSeqNumber = $this->minSeqNumber;
+        if ($currentTimeTick > $this->lastTimeTick->get()) {
+            $this->lastTimeTick->set($currentTimeTick);
+            $this->currentSeqNumber->set($this->minSeqNumber);
 
-            return $this->calcId($this->lastTimeTick);
+            return $this->calcId();
         }
 
-        if ($this->currentSeqNumber > $this->maxSeqNumber) {
+        if ($this->currentSeqNumber->get() > $this->maxSeqNumber) {
             // $this->beginOverCostAction($currentTimeTick);
 
-            $this->termIndex++;
-            $this->lastTimeTick++;
-            $this->currentSeqNumber = $this->minSeqNumber;
-            $this->isOverCost = true;
-            $this->overCostCountInOneTerm = 1;
-            $this->genCountInOneTerm = 1;
+            $this->termIndex->add();
+            $this->lastTimeTick->add();
+            $this->currentSeqNumber->set($this->minSeqNumber);
+            $this->isOverCost->set(1);
+            $this->overCostCountInOneTerm->set(1);
+            $this->genCountInOneTerm->set(1);
 
-            return $this->calcId($this->lastTimeTick);
+            return $this->calcId();
         }
 
-        return $this->calcId($this->lastTimeTick);
+        return $this->calcId();
     }
 
-    private function calcId(int $useTimeTick): int
+    private function calcId(): int
     {
-        $result = (($useTimeTick << $this->timestampShift) +
-            ($this->workerId << $this->seqBitLength) + $this->currentSeqNumber);
+        $result = (($this->lastTimeTick->get() << $this->timestampShift) +
+            ($this->workerId << $this->seqBitLength) + $this->currentSeqNumber->get());
 
-        $this->currentSeqNumber++;
+        $this->currentSeqNumber->add();
         return $result;
     }
 
-    private function calcTurnBackId(int $useTimeTick): int
+    private function calcTurnBackId(): int
     {
-        $result = (($useTimeTick << $this->timestampShift) +
-            ($this->workerId << $this->seqBitLength) + $this->turnBackIndex);
+        $result = (($this->turnBackTimeTick->get() << $this->timestampShift) +
+            ($this->workerId << $this->seqBitLength) + $this->turnBackIndex->get());
 
-        $this->turnBackTimeTick--;
+        $this->turnBackTimeTick->sub();
         return $result;
     }
 
     protected function getCurrentTimeTick(): int
     {
         $millis = (int)(microtime(true) * 1000);
-        return $millis - $this->baseTime;
+        return $millis - $this->baseTime->get();
     }
 
     protected function getNextTimeTick(): int
@@ -261,20 +272,21 @@ class SnowFlake implements IdInterface
     private function getId(): int
     {
         $currentTimeTick = $this->getCurrentTimeTick();
-        if ($this->lastTimeTick === $currentTimeTick) {
-            if (0 === $this->currentSeqNumber = (++$this->currentSeqNumber) & $this->maxSeqNumber) {
+        if ($this->lastTimeTick->get() === $currentTimeTick) {
+            if (0 === $this->currentSeqNumber->add() & $this->maxSeqNumber) {
+                $this->currentSeqNumber->set(0);
                 $currentTimeTick = $this->getNextTimeTick();
             }
         } else {
-            $this->currentSeqNumber = $this->minSeqNumber;
+            $this->currentSeqNumber->set($this->minSeqNumber);
         }
 
-        if ($currentTimeTick < $this->lastTimeTick) {
-            throw new RuntimeException("Time error for " . $this->lastTimeTick - $currentTimeTick . "milliseconds");
+        if ($currentTimeTick < $this->lastTimeTick->get()) {
+            throw new RuntimeException("Time error for " . $this->lastTimeTick->get() - $currentTimeTick . "milliseconds");
         }
 
-        $this->lastTimeTick = $currentTimeTick;
-        return ($currentTimeTick << $this->timestampShift) + ($this->workerId << $this->seqBitLength) + $this->currentSeqNumber;
+        $this->lastTimeTick->set($currentTimeTick);
+        return ($currentTimeTick << $this->timestampShift) + ($this->workerId << $this->seqBitLength) + $this->currentSeqNumber->get();
     }
 
     public function nextId(): int
@@ -296,11 +308,11 @@ class SnowFlake implements IdInterface
             default:
                 if ($this->lock) {
                     $this->swLock->lock();
-                    $id = $this->isOverCost ? $this->nextOverCostId() : $this->nextNormalId();
+                    $id = $this->isOverCost->get() === 1 ? $this->nextOverCostId() : $this->nextNormalId();
                     $this->swLock->unlock();
                     return $id;
                 }
-                return $this->isOverCost ? $this->nextOverCostId() : $this->nextNormalId();
+                return $this->isOverCost->get() === 1 ? $this->nextOverCostId() : $this->nextNormalId();
         }
     }
 }
