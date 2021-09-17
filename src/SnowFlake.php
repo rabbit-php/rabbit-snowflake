@@ -289,7 +289,7 @@ class SnowFlake implements IdInterface
         return ($currentTimeTick << $this->timestampShift) + ($this->workerId << $this->seqBitLength) + $this->currentSeqNumber->get();
     }
 
-    public function nextId(): int
+    public function nextId(): string|int
     {
         switch ($this->method) {
             case self::PHP_FLAKE:

@@ -3,8 +3,7 @@
   "description": "rabbit snowflake",
   "type": "library",
   "require": {
-    "php": ">=7.4.0",
-    "ext-gmp": "*",
+    "php": ">=8.0.0",
     "rabbit/base": "dev-master"
   },
   "require-dev": {
